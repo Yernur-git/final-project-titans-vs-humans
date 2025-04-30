@@ -1,3 +1,5 @@
+package game;
+
 import entities.HumanBase;
 import levels.Level;
 import patterns.factory.HumanFactory;
