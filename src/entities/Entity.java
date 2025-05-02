@@ -2,32 +2,19 @@ package entities;
 
 import gameobjects.Projectile;
 import patterns.strategy.AttackStrategy;
-import utils.ResourceLoader;
+import utils.ResourceLoader; 
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 public abstract class Entity {
-    protected int x, y;
-    protected int width, height;
-    protected int drawWidth, drawHeight;
-    protected int maxHealth;
-    protected int health;
-    protected int currentMaxHealth;
-    protected int attackDamage;
-    protected int attackRange;
-    protected int attackSpeed;
-    public long lastAttackTime;
-    protected boolean isActive;
-    protected AttackStrategy attackStrategy;
-    protected List<Projectile> projectiles = new ArrayList<>();
-    public BufferedImage sprite;
+    protected long lifespanMillis = -1; 
+    protected long spawnTimeMillis; 
 
-
-    public Entity(int x, int y, int width, int height, int maxHealth,
-                  int attackDamage, int attackRange, int attackSpeed) {
+    public Entity(int x, int y, int width, int height, int maxHealth, int attackDamage, int attackRange, int attackSpeed, long lifespanMillis) { 
         this.x = x;
         this.y = y;
         this.width = width;
@@ -42,56 +29,124 @@ public abstract class Entity {
         this.attackSpeed = attackSpeed > 0 ? attackSpeed : 1000;
         this.lastAttackTime = 0;
         this.isActive = true;
+        this.lifespanMillis = lifespanMillis; 
+        this.spawnTimeMillis = System.currentTimeMillis();
+    }
+    public Entity(int x, int y, int width, int height, int maxHealth,
+                 int attackDamage, int attackRange, int attackSpeed) {
+        this(x, y, width, height, maxHealth, attackDamage, attackRange, attackSpeed, -1); \
     }
 
-    protected abstract void move();
-    protected abstract boolean canAttack();
-    protected abstract void attack();
-    protected abstract Color getColor();
-
+    @Override
     public void update() {
         if (!isActive) return;
-
-        move();
-    }
-
-    public void draw(Graphics g) {
-        if (!isActive) return;
-        g.setColor(getColor());
-        g.fillRect(x, y, drawWidth, drawHeight);
-
-    }
-
-    public void die() {
-        this.isActive = false;
-    }
-
-    public void takeDamage(int damage) {
-        if (!isActive) return;
-        // Логика получения урона позже
-        this.health -= damage;
-        if (this.health <= 0) {
-            this.health = 0;
+        if (lifespanMillis > 0 && System.currentTimeMillis() - spawnTimeMillis > lifespanMillis) {
+            die(); 
+            return; 
+        }
+        move(); 
+        long currentTime = System.currentTimeMillis();
+        if (canAttack() && (currentTime - lastAttackTime >= attackSpeed)) {
+            attack(); 
+            lastAttackTime = currentTime; 
+        }
+        updateProjectiles();
+        if (health <= 0) {
             die();
         }
     }
-
-    public boolean isActive() { return isActive; }
-    public int getX() { return x; }
-    public int getY() { return y; }
-    public int getWidth() { return width; }
-    public int getHeight() { return height; }
-    public void setPosition(int x, int y) { this.x = x; this.y = y; }
-
-
-    public void setSprite(String imagePath) {
-        System.out.println("Entity: Attempting to set sprite (ResourceLoader not available yet): " + imagePath);
-
+    protected void updateProjectiles() {
+        Iterator<Projectile> iterator = projectiles.iterator();
+        while (iterator.hasNext()) {
+            Projectile p = iterator.next();
+            p.update(); 
+            if (!p.isActive()) {
+                iterator.remove(); 
+            }
+        }
+    }
+    @Override
+    public void die() {
+        if (!isActive) return; 
+        this.isActive = false;
+        System.out.println(this.getClass().getSimpleName() + " died at (" + x + ", " + y + ")");
+    
+    @Override
+    public void takeDamage(int damage) {
+        if (!isActive || damage <= 0) return; 
+        this.health -= damage;
+         System.out.println(this.getClass().getSimpleName() + " took " + damage + " damage. HP left: " + this.health);
+        if (this.health < 0) {
+            this.health = 0;
+        }
+    }
+   
+     public void setAttackStrategy(AttackStrategy strategy) {
+         this.attackStrategy = strategy; 
+     }
+     public AttackStrategy getAttackStrategy() {
+         return attackStrategy;
+     }
+     public List<Projectile> getProjectiles() {
+         return projectiles; 
+     } 
+     public int getHealth() {
+         return health; 
+     }
+     public int getCurrentMaxHealth() { 
+         return currentMaxHealth; 
+     }
+     public int getCenterY() {
+         return y + height / 2; 
+     } 
+     public Rectangle getBounds() {
+         return new Rectangle(x, y, width, height); 
+     }
+     public long getLifespanMillis() {
+         return lifespanMillis; 
+     } 
+     public long getSpawnTimeMillis() {
+         return spawnTimeMillis;
+     } 
+     public double getRemainingLifespanPercentage() {
+        if (lifespanMillis <= 0 || !isActive) return 1.0;
+        long timeElapsed = System.currentTimeMillis() - spawnTimeMillis;
+        long timeLeft = lifespanMillis - timeElapsed;
+        if (timeLeft <= 0) return 0.0;
+        return (double) timeLeft / lifespanMillis;
+    }
+     @Override
+     public void draw(Graphics g) {
+        if (!isActive) return;
+        if (sprite != null) {
+             g.drawImage(sprite, x, y, drawWidth, drawHeight, null);
+        } else {
+            g.setColor(getColor());
+            g.fillRect(x, y, drawWidth, drawHeight);
+        }
+         drawHealthBar(g);
     }
 
+    protected void drawHealthBar(Graphics g) {
+        if (currentMaxHealth <= 0 || !isActive) return;
+        int barWidth = drawWidth > 30 ? drawWidth : 30; 
+        int barHeight = 5;
+        int barX = x + (drawWidth - barWidth) / 2; 
+        int barY = y - barHeight - 3; 
 
-    public void setAttackStrategy(AttackStrategy strategy) {
-        this.attackStrategy = strategy;
-        System.out.println("Entity: Attack strategy set (Strategy pattern not fully implemented yet).");
+        g.setColor(Color.RED);
+        g.fillRect(barX, barY, barWidth, barHeight);
+        double healthPercentage = (double) health / currentMaxHealth;
+        int greenWidth = (int) (barWidth * healthPercentage);
+        g.setColor(Color.GREEN);
+        g.fillRect(barX, barY, Math.max(0, greenWidth), barHeight);
+        g.setColor(Color.BLACK);
+        g.drawRect(barX, barY, barWidth, barHeight);
     }
+     public void setSprite(String imagePath) {
+         this.sprite = ResourceLoader.loadImage(imagePath);
+         if (this.sprite == null) {
+             System.err.println("Warning: Failed to load sprite '" + imagePath + "' for " + getClass().getSimpleName());
+         }
+     }
 }
