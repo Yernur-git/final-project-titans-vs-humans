@@ -1,15 +1,18 @@
 package entities;
 
+import game.Game; 
+import game.GameSettings; 
 import java.awt.*;
+import java.util.List; 
 
 public class Human extends Entity {
-    private static final int DEFAULT_W = 30;
-    private static final int DEFAULT_H = 50;
     private final int cost;
+    private final int baseMaxHealth; 
 
-    public Human(int x, int y, int maxHealth, int damage, int range, int speed, int cost) {
-        super(x, y, DEFAULT_W, DEFAULT_H, maxHealth, damage, range, speed);
+    public Human(int x, int y, int maxHealth, int damage, int range, int speed, int cost, long lifespanMillis) {
+        super(x, y, EntityTypeData.HUMAN_DRAW_WIDTH, EntityTypeData.HUMAN_DRAW_HEIGHT, maxHealth, damage, range, speed, lifespanMillis); 
         this.cost = cost;
+        this.baseMaxHealth = maxHealth; 
     }
 
     @Override
@@ -18,20 +21,36 @@ public class Human extends Entity {
 
     @Override
     protected boolean canAttack() {
-        return false;
+        if (!isActive || attackStrategy == null) return false; 
+        List<Entity> entities = Game.getInstance().getCurrentLevel().getEntities(); 
+        for (Entity target : entities) {
+            if (target instanceof Titan && target.isActive()) { 
+                int distanceX = target.getX() - (this.x + this.drawWidth); 
+                boolean sameLane = Math.abs(this.getCenterY() - target.getCenterY()) <= GameSettings.ENTITY_INTERACTION_Y_TOLERANCE;
+                if (distanceX >= 0 && distanceX <= this.attackRange && sameLane) {
+                    return true; 
+                }
+            }
+        }
+        return false; 
     }
-
+ 
     @Override
     protected void attack() {
+        if (attackStrategy != null) {
+            attackStrategy.executeAttack(this);
+              System.out.println("Human attacking!"); 
+        } else {
+            System.err.println("Warning: Human attack called with no strategy!");
+        }
     }
 
     @Override
     protected Color getColor() {
-        return Color.BLUE;
+        return new Color(50, 50, 150); 
     }
 
-    public int getCost() {
-        return cost;
-    }
+    public int getCost() { return cost; }
+    public int getBaseMaxHealth() { return baseMaxHealth; } 
+    public int getBaseCost() { return cost; } 
 }
-
