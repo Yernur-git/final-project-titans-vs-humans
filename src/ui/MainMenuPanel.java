@@ -10,6 +10,7 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.io.InputStream;
 
 public class MainMenuPanel extends JPanel implements ActionListener {
 
@@ -88,13 +89,12 @@ public class MainMenuPanel extends JPanel implements ActionListener {
         }
     }
 
-    private void loadBackgroundImage() {
-        String imagePath = "backgrounds/main_menu_bg.png"; 
-        this.backgroundImage = ResourceLoader.loadImage(imagePath);
-        if (this.backgroundImage == null) {
-            System.err.println("MainMenuPanel: Failed to load background image '" + imagePath + "'.");
-            setBackground(Color.BLACK);
+    private void loadBackgroundImage(String imageName) {
+        backgroundImage = ResourceLoader.loadImage("backgrounds/" + imageName);
+        if (backgroundImage == null) {
+            setBackground(Color.DARK_GRAY);
         }
+        repaint();
     }
 
     @Override
@@ -106,8 +106,21 @@ public class MainMenuPanel extends JPanel implements ActionListener {
     }
 
     private void loadFonts() {
-        System.out.println("MainMenuPanel: loadFonts called (using fallback fonts for Day 1).");
-        loadFallbackFonts();
+        try {
+            String fontPath = "/resources/fonts/AOT.ttf";
+            InputStream is = getClass().getResourceAsStream(fontPath);
+            if (is != null) {
+                Font baseFont = Font.createFont(Font.TRUETYPE_FONT, is);
+                titleFont = baseFont.deriveFont(Font.BOLD, 60f);
+                menuFont = baseFont.deriveFont(Font.PLAIN, 36f);
+                is.close();
+            } else {
+                loadFallbackFonts();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            loadFallbackFonts();
+        }
     }
      private void loadFallbackFonts() {
         titleFont = new Font("Impact", Font.BOLD, 60);
