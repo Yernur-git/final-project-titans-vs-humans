@@ -142,6 +142,15 @@ public class MenuPanel extends JPanel implements GameObserver, ActionListener {
         }
     }
 
+    private void updateDecoratorPanelVisibility() {
+        Object selected = entityTypeCombo.getSelectedItem();
+        boolean isHuman = selected instanceof EntityTypeData.HumanType;
+        decoratorPanel.setVisible(isHuman);
+        if (!isHuman) {
+            radioBasic.setSelected(true);
+        }
+    }
+
     @Override
     public void update(String message) {
         if (message != null && !message.isEmpty()) {
@@ -161,5 +170,20 @@ public class MenuPanel extends JPanel implements GameObserver, ActionListener {
     @Override
     public void updateState(GameState currentState) {
         SwingUtilities.invokeLater(() -> updateStateUI(currentState));
+    }
+
+    private void updateBaseHealthLabel() {
+        HumanBase base = game.getHumanBase();
+        if (base != null && base.getCurrentMaxHealth() > 0) {
+            baseHealthLabel.setText(String.format("Wall HP: %d/%d", base.getHealth(), base.getCurrentMaxHealth()));
+            double healthRatio = (double) base.getHealth() / base.getCurrentMaxHealth();
+            if (healthRatio <= 0.0) baseHealthLabel.setForeground(Color.BLACK);
+            else if (healthRatio < 0.3) baseHealthLabel.setForeground(Color.RED);
+            else if (healthRatio < 0.6) baseHealthLabel.setForeground(Color.ORANGE);
+            else baseHealthLabel.setForeground(new Color(0, 100, 0));
+        } else {
+            baseHealthLabel.setText("Wall HP: ---/---");
+            baseHealthLabel.setForeground(Color.GRAY);
+        }
     }
 }
