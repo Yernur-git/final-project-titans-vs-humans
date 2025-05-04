@@ -1,5 +1,6 @@
 package ui;
 
+import game.Difficulty;
 import game.Game;
 import utils.ResourceLoader;
 
@@ -77,12 +78,30 @@ public class MainMenuPanel extends JPanel implements ActionListener {
     public void actionPerformed(ActionEvent e) {
         Object source = e.getSource();
         if (source == playButton) {
-             System.out.println("MainMenuPanel: Play button pressed -> Switching view.");
-            gameFrame.showGameView(); 
+            Game.getInstance().startGame();
+            gameFrame.showGameView();
         } else if (source == difficultyButton) {
-            System.out.println("MainMenuPanel: Difficulty button pressed (Selection logic not implemented yet)."); 
+            Difficulty current = Game.getInstance().getCurrentDifficulty();
+            Difficulty[] options = Difficulty.values();
+            Difficulty choice = (Difficulty) JOptionPane.showInputDialog(
+                    this,
+                    "Select Garrison Difficulty:",
+                    "Difficulty",
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    options,
+                    current);
+
+            if (choice != null) {
+                Game.getInstance().setDifficulty(choice);
+                difficultyButton.setText("Select Difficulty: " + choice.getDisplayName());
+            }
         } else if (source == quitButton) {
-            int choice = JOptionPane.showConfirmDialog(this, "Abandon the Walls?", "Quit Confirmation", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            int choice = JOptionPane.showConfirmDialog(this,
+                    "Abandon the Walls?",
+                    "Quit Confirmation",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
             if (choice == JOptionPane.YES_OPTION) {
                 System.exit(0);
             }
