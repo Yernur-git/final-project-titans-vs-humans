@@ -45,22 +45,59 @@ public class Titan extends Entity {
          return inBlockingRangeX && alignedY;
      }
 
-    @Override
-    protected boolean canAttack() {
-        if (!isActive) return false;
+        @Override
+    protected boolean canAttack(List<Entity> potentialTargets) {
+         if (!isActive || attackSpeed <= 0) return false;
+         HumanBase base = Game.getInstance().getHumanBase(); 
+         if (base != null && base.isActive() && isTargetInAttackZone(base)) {
+             return true;
+         }
+        for (Entity target : potentialTargets) {
+             if (target.isActive() && (target instanceof Human || target instanceof BlockerWall)) {
+                 if (isTargetInAttackZone(target)) {
+                     return true;
+                 }
+             }
+         }
+         return false;
+    }
+
+        @Override
+    protected void attack() {
+        if (!isActive) return;
         HumanBase base = Game.getInstance().getHumanBase();
         if (base != null && base.isActive() && isTargetInAttackZone(base)) {
-            return true;
+            base.takeDamage(this.attackDamage);
+            lastAttackTime = System.currentTimeMillis(); 
+            return;
         }
-        List<Entity> entities = Game.getInstance().getCurrentLevel().getEntities();
+        List<Entity> entities = Game.getInstance().getCurrentLevel().getEntities(); 
         for (Entity target : entities) {
-            if (target.isActive() && (target instanceof Human || target instanceof BlockerWall)) {
+             if (target.isActive() && (target instanceof Human || target instanceof BlockerWall)) {
                 if (isTargetInAttackZone(target)) {
-                    return true;
+                    target.takeDamage(this.attackDamage);
+                    lastAttackTime = System.currentTimeMillis(); 
+                    return; 
                 }
             }
         }
-        return false; 
+    }
+
+        @Override
+    public void update() {
+        if (!isActive) return;
+        super.update();
+
+        if (isActive && this.x + this.drawWidth < 0) {
+            System.out.println("Titan breached! Dealing damage to base.");
+            HumanBase base = Game.getInstance().getHumanBase();
+            if (base != null && base.isActive()) {
+                int breachDamage = this.attackDamage > 0 ? this.attackDamage * 2 : 50; 
+                base.takeDamage(breachDamage);
+                Game.getInstance().notifyObservers("Titan breached! Wall damaged!");
+            }
+            this.die();
+        }
     }
 
     private boolean isTargetInAttackZone(Entity target) {
@@ -71,42 +108,12 @@ public class Titan extends Entity {
         return inRangeX && alignedY;
     }
  
-    @Override
-    protected void attack() {
-        if (!isActive) return;
-        HumanBase base = Game.getInstance().getHumanBase();
-        if (base != null && base.isActive() && isTargetInAttackZone(base)) {
-            base.takeDamage(this.attackDamage);
-              System.out.println("Titan attacked base."); 
-            return; 
-        }
-        List<Entity> entities = Game.getInstance().getCurrentLevel().getEntities();
-        for (Entity target : entities) {
-             if (target.isActive() && (target instanceof Human || target instanceof BlockerWall)) {
-                if (isTargetInAttackZone(target)) {
-                    target.takeDamage(this.attackDamage);
-                       System.out.println("Titan attacked " + target.getClass().getSimpleName()); 
-                    return; 
-                }
-            }
-        }
-           System.out.println("Titan attack: No target found in range.");
-    }
 
     @Override
     protected Color getColor() {
         return new Color(150, 50, 50); 
     }
 
-     @Override
-     public void update() {
-         if (!isActive) return;
-         super.update(); 
-
-         if (this.x + this.drawWidth < 0) { 
-              System.out.println("Titan breached!");
-         }
-     }
 
      public int getMovementSpeed() {
          return movementSpeed; 

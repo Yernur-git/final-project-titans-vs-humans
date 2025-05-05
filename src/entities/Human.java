@@ -20,20 +20,20 @@ public class Human extends Entity {
     }
 
     @Override
-    protected boolean canAttack() {
-        if (!isActive || attackStrategy == null) return false; 
-        List<Entity> entities = Game.getInstance().getCurrentLevel().getEntities(); 
-        for (Entity target : entities) {
-            if (target instanceof Titan && target.isActive()) { 
-                int distanceX = target.getX() - (this.x + this.drawWidth); 
+    protected boolean canAttack(List<Entity> potentialTargets) { 
+        if (!isActive || attackStrategy == null || attackSpeed <= 0) return false;
+        for (Entity target : potentialTargets) {
+            if (target instanceof Titan && target.isActive()) {
+                int distanceX = target.getX() - (this.x + this.drawWidth);
                 boolean sameLane = Math.abs(this.getCenterY() - target.getCenterY()) <= GameSettings.ENTITY_INTERACTION_Y_TOLERANCE;
                 if (distanceX >= 0 && distanceX <= this.attackRange && sameLane) {
-                    return true; 
+                    return true;
                 }
             }
         }
         return false; 
     }
+
  
     @Override
     protected void attack() {
