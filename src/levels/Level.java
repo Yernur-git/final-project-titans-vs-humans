@@ -1,43 +1,124 @@
 package levels;
 
-import entities.Entity;
+import entities.*;
 import game.Difficulty;
 import game.Game;
-
-import java.awt.Graphics;
+import game.GameSettings;
+import gameobjects.Projectile;
+import javax.swing.*;
+import java.awt.*;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 public class Level {
-    private int levelNumber;
-    private List<Wave> waves = new ArrayList<>();
-    private Wave currentWave;
-    private int currentWaveIndex = -1;
-    private List<Entity> entities = new ArrayList<>();
-    private boolean levelComplete = false;
-    private Game gameInstance;
-    private Difficulty difficulty;
-
-    public Level(int levelNumber, Game gameInstance, Difficulty difficulty) {
-        this.levelNumber = levelNumber;
-        this.gameInstance = gameInstance;
-        this.difficulty = difficulty;
-        System.out.println("Level " + levelNumber + " created with difficulty " + difficulty);
-        initializeWaves();
-    }
-
-    private void initializeWaves() {
-        System.out.println("Level " + levelNumber + ": Initializing waves (Data will come from LevelDataStorage later)");
-        System.out.println("Level " + levelNumber + ": (Wave creation logic will be added later)");
-    }
+    // ... существующие поля ...
 
     public void update() {
         if (levelComplete) return;
+
+        if (currentWave != null && currentWave.isActive()) {
+            currentWave.update(entities);
+        }
+
+        List<Entity> entitiesToRemove = new ArrayList<>();
+        Iterator<Entity> entityIterator = entities.iterator();
+        while (entityIterator.hasNext()) {
+            Entity entity = entityIterator.next();
+            if (!entity.isActive()) {
+                Point gridPos = getGridPosition(entity);
+                if (gridPos != null) {
+                    gameInstance.getGamePanel().clearGridCell(gridPos.x, gridPos.y, entity);
+                }
+                entitiesToRemove.add(entity);
+                continue;
+            }
+            entity.update();
+            if (!entity.isActive()) {
+                Point gridPos = getGridPosition(entity);
+                if (gridPos != null) {
+                    gameInstance.getGamePanel().clearGridCell(gridPos.x, gridPos.y, entity);
+                }
+                entitiesToRemove.add(entity);
+            }
+        }
+
+        for (Entity deadEntity : entitiesToRemove) {
+            entities.remove(deadEntity);
+            if (deadEntity instanceof Titan) {
+                int reward = (int) (GameSettings.TITAN_KILL_REWARD_BASE * (1.0 + (levelNumber - 1) * 0.1));
+                gameInstance.addResources(reward);
+            }
+        }
+
+        handleCollisions();
+        checkWaveCompletion();
     }
 
-    public void draw(Graphics g) {
+    private void handleCollisions() {
+        List<Entity> currentEntities = new ArrayList<>(entities);
+        for (Entity entity : currentEntities) {
+            if (entity instanceof Human && entity.isActive()) {
+                List<Projectile> projectiles = new ArrayList<>(entity.getProjectiles());
+                Iterator<Projectile> projIterator = projectiles.iterator();
+                while (projIterator.hasNext()) {
+                    Projectile p = projIterator.next();
+                    if (!p.isActive()) continue;
+                    for (Entity target : currentEntities) {
+                        if (target.isActive() && (target instanceof Titan || target instanceof BlockerWall)) {
+                            if (p.getBounds().intersects(target.getBounds())) {
+                                target.takeDamage(p.getDamage());
+                                p.setInactive();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (Entity entity : currentEntities) {
+            if (entity instanceof Titan titan && entity.isActive()) {
+                for (Entity target : currentEntities) {
+                    if (target instanceof SpikeTrap trap && target.isActive()) {
+                        if (!trap.isTriggered() && titan.getBounds().intersects(trap.getBounds())) {
+                            trap.trigger(titan);
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    public List<Entity> getEntities() { return entities; }
-    public boolean isLevelComplete() { return levelComplete; }
+    private void checkWaveCompletion() {
+        if (currentWave != null && currentWave.isSpawningComplete() && !levelComplete) {
+            boolean titansRemaining = entities.stream().anyMatch(e -> e instanceof Titan && e.isActive());
+            if (!titansRemaining) {
+                if (currentWaveIndex == waves.indexOf(currentWave)) {
+                    System.out.println("Level " + levelNumber + ", Wave " + currentWave.getWaveNumber() + " cleared!");
+                    int waveReward = (int)(GameSettings.WAVE_COMPLETE_REWARD_BASE * (1.0 + (levelNumber - 1) * 0.1 + currentWaveIndex * 0.05));
+                    gameInstance.addResources(waveReward);
+                    gameInstance.notifyObservers("Wave " + currentWave.getWaveNumber() + " cleared! +" + waveReward + " coins");
+
+                    if (currentWaveIndex < waves.size() - 1) {
+                        startNextWave();
+                    } else {
+                        levelComplete = true;
+                        int levelReward = (int)(GameSettings.LEVEL_COMPLETE_REWARD_BASE * (1.0 + (levelNumber - 1) * 0.2));
+                        gameInstance.addResources(levelReward);
+                        gameInstance.notifyObservers("Level " + levelNumber + " complete! +" + levelReward + " coins");
+
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(gameInstance.getGamePanel(),
+                                    "Congratulations! Level " + levelNumber + " Secured!\n+" + levelReward + " coins!",
+                                    "Victory!", JOptionPane.INFORMATION_MESSAGE);
+                        });
+                        gameInstance.checkLevelCompletion();
+                    }
+                }
+            }
+        }
+    }
+
+    // ... остальные методы ...
 }
