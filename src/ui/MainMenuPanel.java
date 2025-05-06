@@ -14,26 +14,24 @@ import java.awt.image.BufferedImage;
 import java.io.InputStream;
 
 public class MainMenuPanel extends JPanel implements ActionListener {
-
     private GameFrame gameFrame;
     private JButton playButton;
     private JButton difficultyButton;
     private JButton quitButton;
     private JLabel titleLabel;
-    private Font titleFont = new Font("Impact", Font.BOLD, 60); 
-    private Font menuFont = new Font("Segoe UI", Font.BOLD, 36); 
+    private Font titleFont;
+    private Font menuFont;
     private Color menuColor = new Color(220, 220, 200);
     private Color selectedColor = Color.WHITE;
     private Color titleColor = new Color(180, 50, 50);
-    private BufferedImage backgroundImage;
+    private BufferedImage background;
 
     public MainMenuPanel(GameFrame frame) {
         this.gameFrame = frame;
         setLayout(new GridBagLayout());
-        setBackground(Color.BLACK);
+        loadBackground("main_menu_bg.png");
 
-        loadBackgroundImage();
-        loadFonts(); 
+        loadFonts();
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridwidth = GridBagConstraints.REMAINDER;
@@ -48,7 +46,7 @@ public class MainMenuPanel extends JPanel implements ActionListener {
 
         gbc.insets = new Insets(15, 0, 15, 0);
         playButton = createMenuButton("New Garrison");
-        difficultyButton = createMenuButton("Select Difficulty (Not Implemented)"); 
+        difficultyButton = createMenuButton("Select Difficulty: " + Game.getInstance().getCurrentDifficulty().getDisplayName());
         quitButton = createMenuButton("Quit Garrison");
 
         add(playButton, gbc);
@@ -68,11 +66,42 @@ public class MainMenuPanel extends JPanel implements ActionListener {
         button.addActionListener(this);
 
         button.addMouseListener(new MouseAdapter() {
-            @Override public void mouseEntered(MouseEvent e) { button.setForeground(selectedColor); }
-            @Override public void mouseExited(MouseEvent e) { button.setForeground(menuColor); }
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setForeground(selectedColor);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setForeground(menuColor);
+            }
         });
         return button;
     }
+
+    private void loadFonts() {
+        try {
+            String fontPath = "/resources/fonts/AOT.ttf";
+            InputStream is = getClass().getResourceAsStream(fontPath);
+            if (is != null) {
+                Font baseFont = Font.createFont(Font.TRUETYPE_FONT, is);
+                titleFont = baseFont.deriveFont(Font.BOLD, 60f);
+                menuFont = baseFont.deriveFont(Font.PLAIN, 36f);
+                is.close();
+            } else {
+                loadFallbackFonts();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            loadFallbackFonts();
+        }
+    }
+
+    private void loadFallbackFonts() {
+        titleFont = new Font("Impact", Font.BOLD, 60);
+        menuFont = new Font("Segoe UI", Font.BOLD, 36);
+    }
+
 
     @Override
     public void actionPerformed(ActionEvent e) {
@@ -108,9 +137,9 @@ public class MainMenuPanel extends JPanel implements ActionListener {
         }
     }
 
-    private void loadBackgroundImage(String imageName) {
-        backgroundImage = ResourceLoader.loadImage("backgrounds/" + imageName);
-        if (backgroundImage == null) {
+    private void loadBackground(String imageName) {
+        background = ResourceLoader.loadImage("backgrounds/" + imageName);
+        if (background == null) {
             setBackground(Color.DARK_GRAY);
         }
         repaint();
@@ -119,30 +148,8 @@ public class MainMenuPanel extends JPanel implements ActionListener {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        if (this.backgroundImage != null) {
-            g.drawImage(this.backgroundImage, 0, 0, getWidth(), getHeight(), this);
+        if (this.background != null) {
+            g.drawImage(this.background, 0, 0, getWidth(), getHeight(), this);
         }
-    }
-
-    private void loadFonts() {
-        try {
-            String fontPath = "/resources/fonts/AOT.ttf";
-            InputStream is = getClass().getResourceAsStream(fontPath);
-            if (is != null) {
-                Font baseFont = Font.createFont(Font.TRUETYPE_FONT, is);
-                titleFont = baseFont.deriveFont(Font.BOLD, 60f);
-                menuFont = baseFont.deriveFont(Font.PLAIN, 36f);
-                is.close();
-            } else {
-                loadFallbackFonts();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            loadFallbackFonts();
-        }
-    }
-     private void loadFallbackFonts() {
-        titleFont = new Font("Impact", Font.BOLD, 60);
-        menuFont = new Font("Segoe UI", Font.BOLD, 36);
     }
 }
