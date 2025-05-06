@@ -10,21 +10,42 @@ public class Projectile {
     protected int damage;
     protected boolean isActive;
     protected Color color;
+    private final int startX; 
+    private final int range; 
+    private final Entity owner; 
 
-    public Projectile(int x, int y, int width, int height, int speed, int damage, Color color) {
-        this.x = x;
-        this.y = y;
+
+    public Projectile(Entity owner, int startX, int startY, int width, int height, int speed, int damage, int range, Color color) {
+        this.owner = owner; 
+        this.x = startX;
+        this.y = startY;
+        this.startX = startX; 
         this.width = width;
         this.height = height;
         this.speed = speed;
         this.damage = damage;
+        this.range = range; 
         this.color = color;
         this.isActive = true;
     }
 
+
+    @Override
     public void update() {
         if (!isActive) return;
         x += speed;
+
+        if (Math.abs(x - startX) > range) {
+            setInactive(); 
+            return; 
+        }
+        if (x < -width || x > Game.getInstance().getGamePanelWidth()) {
+            setInactive();
+        }
+    }
+
+    public Entity getOwner() {
+        return owner;
     }
 
     public void draw(Graphics g) {
