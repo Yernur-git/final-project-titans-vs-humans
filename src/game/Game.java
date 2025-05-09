@@ -1,44 +1,102 @@
 package game;
 
-import patterns.state.*;
+import entities.HumanBase;
+import entities.EntityTypeData;
+import levels.Level;
 import levels.LevelDataStorage;
+import patterns.factory.HumanFactory;
+import patterns.factory.ObstacleFactory;
+import patterns.factory.TitanFactory;
+import patterns.observer.GameObserver;
+import patterns.observer.GameSubject;
+import patterns.state.*;
+import ui.GamePanel;
+
+import javax.swing.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Game implements GameSubject {
-    private HumanBase humanBase;
-    private Level currentLevel;
-    private int currentLevelNumber;
-    private int resources;
-    private int gameTick;
+    private static Game instance;
     private GamePanel gamePanel;
-    private GameState currentState;
+    private Level currentLevel;
+    private HumanBase humanBase;
+    private List<GameObserver> observers = new ArrayList<>();
+
     private HumanFactory humanFactory;
     private TitanFactory titanFactory;
     private ObstacleFactory obstacleFactory;
-    private Difficulty currentDifficulty;
+
+    private GameState currentState;
+    private Difficulty currentDifficulty = Difficulty.MEDIUM;
+
+    private int currentLevelNumber;
+    private final int MAX_LEVELS = GameSettings.MAX_LEVELS;
+    private final int BASE_HEALTH_START = GameSettings.BASE_HEALTH_START;
+    private final int RESOURCE_INTERVAL = GameSettings.RESOURCE_INTERVAL_TICKS;
+    private final int RESOURCE_AMOUNT_BASE = GameSettings.RESOURCE_AMOUNT_BASE;
+    private final long PLACEMENT_COOLDOWN = GameSettings.PLACEMENT_COOLDOWN_MILLIS;
+
+    private int resources;
+    private long gameTick = 0;
+
+    private Game() {
+        humanFactory = new HumanFactory();
+        titanFactory = new TitanFactory();
+        obstacleFactory = new ObstacleFactory();
+        currentState = new NotStartedState(this);
+    }
+
+    public static Game getInstance() {
+        if (instance == null) {
+            instance = new Game();
+        }
+        return instance;
+    }
+
+    public void initialize(GamePanel panel) {
+        if (this.gamePanel == null) {
+            this.gamePanel = panel;
+            notifyStateUpdate();
+        }
+    }
+
+    public void setState(GameState newState) {
+        this.currentState = newState;
+        notifyStateUpdate();
+    }
+
+    public void startGame() { currentState.startGame(); }
+    public void pauseGame() { currentState.pause(); }
+    public void resumeGame() { currentState.resume(); }
+    public void update() { currentState.update(); }
+    public void gameOver(String reason) { currentState.loseGame(reason); }
+    public void gameWin() { currentState.winGame(); }
+
+    public void resetGame() {
+        setState(new NotStartedState(this));
+        notifyObservers("Game Reset. Select difficulty and start.");
+        this.resources = 0;
+        notifyResourceUpdate();
+        if(gamePanel != null) gamePanel.levelChanged(1);
+    }
 
     public void tick() {
-        if (!(currentState instanceof RunningState)) {
-            if (gamePanel != null && (currentState instanceof PausedState || currentState instanceof GameOverState || currentState instanceof GameWonState)) {
-                gamePanel.repaint();
-            }
-            return;
-        }
+        if (!(currentState instanceof RunningState)) return;
 
         gameTick++;
 
-        if (gameTick % GameSettings.RESOURCE_INTERVAL_TICKS == 0) {
-            int resourceGain = GameSettings.RESOURCE_AMOUNT_BASE + (currentLevelNumber * 2);
+        if (gameTick % RESOURCE_INTERVAL == 0) {
+            int resourceGain = RESOURCE_AMOUNT_BASE + (currentLevelNumber * 2);
             addResources(resourceGain);
         }
 
         if (currentLevel != null) {
             currentLevel.update();
-        } else {
-            System.err.println("Error: Game running but currentLevel is null!");
         }
 
         if (humanBase != null && humanBase.isDestroyed()) {
-            gameOver("Your base (Wall Maria?) has been destroyed!");
+            gameOver("Your base was destroyed!");
             return;
         }
 
@@ -47,26 +105,16 @@ public class Game implements GameSubject {
         }
     }
 
-    public void addResources(int amount) {
-        if (amount == 0) return;
-        resources += amount;
-        if (resources < 0) resources = 0;
-        System.out.println("Resources changed by " + amount + ". Current: " + resources);
-        notifyResourceUpdate();
-    }
-
     public void startNewLevel(int levelNumber) {
         int maxLevelsDefined = LevelDataStorage.getMaxLevelsDefined();
-        if (levelNumber > GameSettings.MAX_LEVELS || levelNumber > maxLevelsDefined || LevelDataStorage.getLevelInfo(levelNumber) == null) {
-            System.out.println("Attempting to start level beyond max defined/available: " + levelNumber);
+        if (levelNumber > MAX_LEVELS || levelNumber > maxLevelsDefined) {
             gameWin();
             return;
         }
-        System.out.println("Starting Level " + levelNumber + " on " + currentDifficulty + " difficulty.");
         this.currentLevelNumber = levelNumber;
 
         double baseHealthMultiplier = currentDifficulty.getBaseHealthMultiplier();
-        int scaledBaseHealth = (int) (GameSettings.BASE_HEALTH_START * Math.pow(1.1, levelNumber - 1) * baseHealthMultiplier);
+        int scaledBaseHealth = (int) (BASE_HEALTH_START * Math.pow(1.1, levelNumber - 1) * baseHealthMultiplier);
         this.humanBase = new HumanBase(scaledBaseHealth);
 
         if (levelNumber == 1) {
@@ -82,15 +130,64 @@ public class Game implements GameSubject {
         if (gamePanel != null) gamePanel.levelChanged(levelNumber);
     }
 
-    public Game() {
-        humanFactory = new HumanFactory();
-        titanFactory = new TitanFactory();
-        obstacleFactory = new ObstacleFactory();
-        currentState = new NotStartedState(this);
-        System.out.println("Game Singleton Initialized with Factories.");
+    public void checkLevelCompletion() {
+        if (currentLevel != null && currentLevel.isLevelComplete() && currentState instanceof RunningState) {
+            if (currentLevelNumber < MAX_LEVELS) {
+                startNewLevel(currentLevelNumber + 1);
+            } else {
+                gameWin();
+            }
+        }
     }
 
+    public void addResources(int amount) {
+        resources += amount;
+        if (resources < 0) resources = 0;
+        notifyResourceUpdate();
+    }
+
+    public int getResources() { return resources; }
+
+    public void setDifficulty(Difficulty difficulty) {
+        if (!(currentState instanceof RunningState || currentState instanceof PausedState)) {
+            this.currentDifficulty = difficulty;
+            notifyObservers("Difficulty set to " + difficulty);
+        } else {
+            notifyObservers("Cannot change difficulty while game is running or paused.");
+        }
+    }
+
+    public Level getCurrentLevel() { return currentLevel; }
+    public HumanBase getHumanBase() { return humanBase; }
+    public GameState getCurrentState() { return currentState; }
+    public Difficulty getCurrentDifficulty() { return currentDifficulty; }
+    public int getCurrentLevelNumber() { return currentLevelNumber; }
+    public int getGamePanelWidth() { return (gamePanel != null) ? gamePanel.getWidth() : 1200; }
+    public GamePanel getGamePanel() { return gamePanel; }
     public HumanFactory getHumanFactory() { return humanFactory; }
     public TitanFactory getTitanFactory() { return titanFactory; }
     public ObstacleFactory getObstacleFactory() { return obstacleFactory; }
+    public long getPlacementCooldown() { return PLACEMENT_COOLDOWN; }
+
+    @Override public void registerObserver(GameObserver observer) {
+        if (!observers.contains(observer)) observers.add(observer);
+    }
+
+    @Override public void removeObserver(GameObserver observer) {
+        observers.remove(observer);
+    }
+
+    @Override public void notifyObservers(String message) {
+        for (GameObserver observer : observers) observer.update(message);
+    }
+
+    @Override public void notifyResourceUpdate() {
+        int res = getResources();
+        for (GameObserver observer : observers) observer.updateResources(res);
+    }
+
+    @Override public void notifyStateUpdate() {
+        GameState state = getCurrentState();
+        for (GameObserver observer : observers) observer.updateState(state);
+    }
 }

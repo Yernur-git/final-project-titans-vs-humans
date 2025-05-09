@@ -13,14 +13,15 @@ public enum Difficulty {
     private final double baseHealthMultiplier;
     private final double spawnIntervalMultiplier;
 
-    Difficulty(String displayName, double ths, double tds, double tms, double rsm, double bhm, double sim) {
+    Difficulty(String displayName, double titanHealthScale, double titanDamageScale, double titanMoveSpeedScale,
+               double resourceStartMultiplier, double baseHealthMultiplier, double spawnIntervalMultiplier) {
         this.displayName = displayName;
-        this.titanHealthScale = ths;
-        this.titanDamageScale = tds;
-        this.titanMoveSpeedScale = tms;
-        this.resourceStartMultiplier = rsm;
-        this.baseHealthMultiplier = bhm;
-        this.spawnIntervalMultiplier = sim;
+        this.titanHealthScale = titanHealthScale;
+        this.titanDamageScale = titanDamageScale;
+        this.titanMoveSpeedScale = titanMoveSpeedScale;
+        this.resourceStartMultiplier = resourceStartMultiplier;
+        this.baseHealthMultiplier = baseHealthMultiplier;
+        this.spawnIntervalMultiplier = spawnIntervalMultiplier;
     }
 
     public String getDisplayName() { return displayName; }
@@ -36,3 +37,4 @@ public enum Difficulty {
         return displayName;
     }
 }
+
