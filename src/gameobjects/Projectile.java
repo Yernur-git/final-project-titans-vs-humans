@@ -1,51 +1,44 @@
 package gameobjects;
 
 import entities.Entity;
+
 import java.awt.*;
 
 public class Projectile {
-    protected int x, y;
-    protected int width, height;
-    protected int speed;
-    protected int damage;
-    protected boolean isActive;
-    protected Color color;
-    private final int startX; 
-    private final int range; 
-    private final Entity owner; 
-
+    private int x;
+    private final int y;
+    private final int startX;
+    private final int width;
+    private final int height;
+    private final int speed;
+    private final int damage;
+    private boolean isActive;
+    private final Color color;
+    private final int range;
+    private final Entity owner;
 
     public Projectile(Entity owner, int startX, int startY, int width, int height, int speed, int damage, int range, Color color) {
-        this.owner = owner; 
+        this.owner = owner;
         this.x = startX;
         this.y = startY;
-        this.startX = startX; 
+        this.startX = startX;
         this.width = width;
         this.height = height;
         this.speed = speed;
         this.damage = damage;
-        this.range = range; 
-        this.color = color;
+        this.range = range;
         this.isActive = true;
+        this.color = color;
     }
 
-
-    @Override
     public void update() {
         if (!isActive) return;
+
         x += speed;
 
         if (Math.abs(x - startX) > range) {
-            setInactive(); 
-            return; 
-        }
-        if (x < -width || x > Game.getInstance().getGamePanelWidth()) {
             setInactive();
         }
-    }
-
-    public Entity getOwner() {
-        return owner;
     }
 
     public void draw(Graphics g) {
@@ -57,13 +50,20 @@ public class Projectile {
     public boolean isActive() {
         return isActive;
     }
+
     public void setInactive() {
         this.isActive = false;
     }
+
     public int getDamage() {
         return damage;
     }
+
     public Rectangle getBounds() {
         return new Rectangle(x, y, width, height);
+    }
+
+    public Entity getOwner() {
+        return owner;
     }
 }
