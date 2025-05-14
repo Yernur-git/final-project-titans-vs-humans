@@ -6,15 +6,18 @@ import java.awt.Color;
 public class BasicAttack implements AttackStrategy {
     @Override
     public void executeAttack(Entity attacker) {
-        int projStartX = attacker.getX() + attacker.getWidth();
-        int projStartY = attacker.getY() + attacker.getHeight() / 2 - 3;
+
         Projectile projectile = new Projectile(
-                projStartX, projStartY,
+                attacker,
+                attacker.getX() + attacker.getWidth(),
+                attacker.getY() + attacker.getHeight() / 2 - 3,
                 8, 4,
                 5,
                 attacker.getAttackDamage(),
+                attacker.getAttackRange(),
                 Color.YELLOW
         );
+
         attacker.getProjectiles().add(projectile);
     }
 }
