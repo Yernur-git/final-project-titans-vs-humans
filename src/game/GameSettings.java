@@ -10,6 +10,12 @@ public final class GameSettings {
     public static final int RESOURCE_AMOUNT_BASE = 10;
     public static final long PLACEMENT_COOLDOWN_MILLIS = 1500;
     public static final int STARTING_RESOURCES_MEDIUM = 200;
+    public static final long RELOCATION_COOLDOWN_MILLIS = 5000;
+    public static final int RELOCATIONS_PER_LEVEL_LIMIT = 3;
+    public static final long Bomb_COOLDOWN_MILLIS = 10000;
+    public static final int Bomb_DAMAGE = 100;
+    public static final int Bomb_RADIUS = 80;
+    public static final long Bomb_EFFECT_DURATION_MILLIS = 500;
 
     public static final int CELL_WIDTH = 60;
     public static final int CELL_HEIGHT = 60;

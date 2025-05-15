@@ -34,6 +34,7 @@ public class MenuPanel extends JPanel implements GameObserver, ActionListener {
     private final JButton placeButton;
     private final JButton startPauseResumeButton;
     private final JButton resetButton;
+    private JLabel bombStatusLabel;
 
     private final Timer uiUpdateTimer;
 
@@ -43,6 +44,10 @@ public class MenuPanel extends JPanel implements GameObserver, ActionListener {
         this.gamePanel = gamePanel;
         this.gameFrame = gameFrame;
         this.game.registerObserver(this);
+
+        bombStatusLabel = new JLabel("Bomb: Ready");
+        bombStatusLabel.setFont(new Font("Serif", Font.PLAIN, 12));
+        add(bombStatusLabel);
 
 
         setLayout(new FlowLayout(FlowLayout.LEFT, 8, 5));
@@ -137,8 +142,25 @@ public class MenuPanel extends JPanel implements GameObserver, ActionListener {
             updateCooldownDisplay();
             updateBaseHealthLabel();
             updateWaveLabel();
+            updatebombStatusLabel();
         });
         uiUpdateTimer.start();
+    }
+
+    private void updatebombStatusLabel() {
+        if (!(game.getCurrentState() instanceof RunningState || game.getCurrentState() instanceof PausedState)) {
+            bombStatusLabel.setText("Bomb: N/A");
+            bombStatusLabel.setForeground(Color.GRAY);
+            return;
+        }
+        long remainingCooldown = game.getRemainingBombCooldown();
+        if (remainingCooldown > 0) {
+            bombStatusLabel.setText(String.format("Bomb CD: %.1fs", remainingCooldown / 1000.0));
+            bombStatusLabel.setForeground(Color.ORANGE);
+        } else {
+            bombStatusLabel.setText("Bomb: READY (E)");
+            bombStatusLabel.setForeground(new Color(0, 100, 0));
+        }
     }
 
     @Override

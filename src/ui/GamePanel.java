@@ -11,15 +11,15 @@ import patterns.decorator.ArmoredHuman;
 import patterns.decorator.VeteranHuman;
 import patterns.state.RunningState;
 import utils.ResourceLoader;
+import game.Game.BombEffect;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 public class GamePanel extends JPanel implements ActionListener {
     private final Game game;
@@ -41,6 +41,13 @@ public class GamePanel extends JPanel implements ActionListener {
     private static final int[] LANE_Y_CENTERS = GameSettings.LANE_Y_CENTERS;
     private static final int LANE_HEIGHT_TOLERANCE = GameSettings.LANE_HEIGHT_TOLERANCE;
 
+    private boolean isRelocationModeActive = false;
+    private Human selectedUnitForRelocation = null;
+    private Point highlightedRelocationTargetCell = null;
+
+    private boolean isBombAimingMode = false;
+    private Point BombAimLocation = null;
+
     private final Map<Point, Entity> placementGrid = new HashMap<>();
     private Point highlightedCell = null;
 
@@ -55,6 +62,7 @@ public class GamePanel extends JPanel implements ActionListener {
         gameTimer.start();
 
         setupMouseListener();
+        setupKeyBindings();
         game.initialize(this);
         setFocusable(true);
     }
@@ -76,48 +84,99 @@ public class GamePanel extends JPanel implements ActionListener {
             loadBackground("default_bg.png");
         }
         placementGrid.clear();
+        cancelAllModes(null);
         repaint();
+    }
+
+    private void setupKeyBindings() {
+        String BombActionKey = "performBomb";
+        String cancelModesActionKey = "cancelAllActiveModes";
+
+        InputMap inputMap = getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = getActionMap();
+
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_E, 0), BombActionKey);
+        actionMap.put(BombActionKey, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (!(game.getCurrentState() instanceof RunningState)) return;
+
+                if (game.canUseBomb()) {
+                    if (!isBombAimingMode) {
+                        cancelAllModes(null);
+                        isBombAimingMode = true;
+                        setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                        game.notifyObservers("Bomb aiming: Click to unleash!");
+                    } else {
+                        cancelAllModes("Bomb aiming cancelled.");
+                    }
+                }
+                repaint();
+            }
+        });
+
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), cancelModesActionKey);
+        actionMap.put(cancelModesActionKey, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (isBombAimingMode || placementMode || isRelocationModeActive) {
+                    cancelAllModes("Action cancelled by user.");
+                }
+            }
+        });
     }
 
     private void setupMouseListener() {
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (placementMode && game.getCurrentState() instanceof RunningState) {
-                    handlePlacementAttempt(e.getX(), e.getY());
-                } else if (placementMode) {
-                    cancelPlacementMode("Cannot place units now (Game not running).");
+                if (!(game.getCurrentState() instanceof RunningState)) {
+                    cancelAllModes("Game not running.");
+                    return;
                 }
-            }
 
-            @Override
-            public void mouseMoved(MouseEvent e) {
-                if (placementMode && game.getCurrentState() instanceof RunningState) {
-                    Point currentCell = getGridCellFromMouse(e.getX(), e.getY());
-                    if ((currentCell == null && highlightedCell != null) || (currentCell != null && !currentCell.equals(highlightedCell))) {
-                        highlightedCell = currentCell;
-                        repaint();
-                    }
+                if (isBombAimingMode) {
+                    game.performBomb(e.getX(), e.getY());
+                    isBombAimingMode = false;
+                    BombAimLocation = null;
+                    setCursor(Cursor.getDefaultCursor());
+                } else if (placementMode) {
+                    handlePlacementAttempt(e.getX(), e.getY());
+                } else if (isRelocationModeActive) {
+                    handleRelocationTargetSelection(e.getX(), e.getY());
                 } else {
-                    if (highlightedCell != null) {
-                        highlightedCell = null;
-                        repaint();
-                    }
+                    handleUnitSelectionForRelocation(e.getX(), e.getY());
                 }
             }
 
             @Override
             public void mouseEntered(MouseEvent e) {
-                if (placementMode && game.getCurrentState() instanceof RunningState) {
+                if (!(game.getCurrentState() instanceof RunningState)) return;
+
+                if (isBombAimingMode || placementMode) {
                     setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                } else if (isRelocationModeActive) {
+                    setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                 }
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
                 setCursor(Cursor.getDefaultCursor());
+                boolean needsRepaint = false;
                 if (highlightedCell != null) {
                     highlightedCell = null;
+                    needsRepaint = true;
+                }
+                if (highlightedRelocationTargetCell != null) {
+                    highlightedRelocationTargetCell = null;
+                    needsRepaint = true;
+                }
+                if (BombAimLocation != null) {
+                    BombAimLocation = null;
+                    needsRepaint = true;
+                }
+                if (needsRepaint) {
                     repaint();
                 }
             }
@@ -126,15 +185,54 @@ public class GamePanel extends JPanel implements ActionListener {
         addMouseMotionListener(new MouseAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
-                if (placementMode && game.getCurrentState() instanceof RunningState) {
-                    Point currentCell = getGridCellFromMouse(e.getX(), e.getY());
-                    if ((currentCell == null && highlightedCell != null) || (currentCell != null && !currentCell.equals(highlightedCell))) {
-                        highlightedCell = currentCell;
+                if (!(game.getCurrentState() instanceof RunningState)) {
+                    if (highlightedCell != null || highlightedRelocationTargetCell != null || BombAimLocation != null) {
+                        highlightedCell = null;
+                        highlightedRelocationTargetCell = null;
+                        BombAimLocation = null;
                         repaint();
                     }
+                    return;
+                }
+
+                Point mouseGridPoint = getGridCellFromMouse(e.getX(), e.getY());
+
+                if (isBombAimingMode) {
+                    BombAimLocation = e.getPoint();
+                    if (highlightedCell != null || highlightedRelocationTargetCell != null) {
+                        highlightedCell = null;
+                        highlightedRelocationTargetCell = null;
+                    }
+                    repaint();
+                } else if (placementMode) {
+                    if ((mouseGridPoint == null && highlightedCell != null) || (mouseGridPoint != null && !mouseGridPoint.equals(highlightedCell))) {
+                        highlightedCell = mouseGridPoint;
+                    }
+                    if (highlightedRelocationTargetCell != null) highlightedRelocationTargetCell = null;
+                    if (BombAimLocation != null) BombAimLocation = null;
+                    repaint();
+                } else if (isRelocationModeActive && selectedUnitForRelocation != null) {
+                    if ((mouseGridPoint == null && highlightedRelocationTargetCell != null) || (mouseGridPoint != null && !mouseGridPoint.equals(highlightedRelocationTargetCell))) {
+                        highlightedRelocationTargetCell = mouseGridPoint;
+                    }
+                    if (highlightedCell != null) highlightedCell = null;
+                    if (BombAimLocation != null) BombAimLocation = null;
+                    repaint();
                 } else {
+                    boolean needsRepaint = false;
                     if (highlightedCell != null) {
                         highlightedCell = null;
+                        needsRepaint = true;
+                    }
+                    if (highlightedRelocationTargetCell != null) {
+                        highlightedRelocationTargetCell = null;
+                        needsRepaint = true;
+                    }
+                    if (BombAimLocation != null) {
+                        BombAimLocation = null;
+                        needsRepaint = true;
+                    }
+                    if (needsRepaint) {
                         repaint();
                     }
                 }
@@ -142,8 +240,89 @@ public class GamePanel extends JPanel implements ActionListener {
         });
     }
 
+    private void handleUnitSelectionForRelocation(int mouseX, int mouseY) {
+        if (!game.canRelocateNow()) {
+            return;
+        }
+
+        Point cell = getGridCellFromMouse(mouseX, mouseY);
+        if (cell != null) {
+            Entity entity = placementGrid.get(cell);
+            if (entity instanceof Human && entity.isActive()) {
+                cancelAllModes(null);
+                this.isBombAimingMode = false;
+                selectedUnitForRelocation = (Human) entity;
+                isRelocationModeActive = true;
+                placementMode = false;
+                setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                game.notifyObservers("Relocation mode: Select new location for " + selectedUnitForRelocation.getClass().getSimpleName());
+                repaint();
+            } else {
+                game.notifyObservers("No movable unit selected.");
+            }
+        }
+    }
+
+    private void handleRelocationTargetSelection(int mouseX, int mouseY) {
+        Point targetCell = getGridCellFromMouse(mouseX, mouseY);
+
+        if (targetCell == null) {
+            cancelAllModes("Invalid relocation target area!");
+            return;
+        }
+
+        if (placementGrid.containsKey(targetCell) && placementGrid.get(targetCell) != null && placementGrid.get(targetCell).isActive()) {
+            cancelAllModes("Target cell (" + targetCell.x + "," + targetCell.y + ") is occupied!");
+            return;
+        }
+
+        Point originalCell = getGridCellForEntity(selectedUnitForRelocation);
+
+        if (originalCell == null) {
+            cancelAllModes("Error: Could not find original position of the unit.");
+            return;
+        }
+
+        if (originalCell.equals(targetCell)) {
+            cancelAllModes("Unit already at this location. Relocation cancelled.");
+            return;
+        }
+
+        int targetLaneY = LANE_Y_CENTERS[targetCell.x];
+        int cellCenterX = GRID_START_X + targetCell.y * CELL_WIDTH + CELL_WIDTH / 2;
+        int newActualX = cellCenterX - selectedUnitForRelocation.getWidth() / 2;
+        int newActualY = targetLaneY - selectedUnitForRelocation.getHeight() / 2;
+
+        placementGrid.remove(originalCell);
+        selectedUnitForRelocation.setPosition(newActualX, newActualY);
+        placementGrid.put(targetCell, selectedUnitForRelocation);
+
+        game.recordRelocation();
+
+        game.notifyObservers(selectedUnitForRelocation.getClass().getSimpleName() + " relocated to (" + targetCell.x + "," + targetCell.y + ").");
+        cancelAllModes(null);
+    }
+
+    private void cancelAllModes(String reason) {
+        placementMode = false;
+        isRelocationModeActive = false;
+        isBombAimingMode = false;
+        selectedUnitForRelocation = null;
+        selectedEnumType = null;
+        highlightedCell = null;
+        highlightedRelocationTargetCell = null;
+        BombAimLocation = null;
+        setCursor(Cursor.getDefaultCursor());
+        if (reason != null && !reason.isEmpty()) {
+            game.notifyObservers(reason);
+        }
+        repaint();
+    }
+
     public void enterPlacementMode(Object enumType, String decorator) {
         if (game.getCurrentState() instanceof RunningState) {
+            cancelAllModes(null);
+            this.isBombAimingMode = false;
             this.selectedEnumType = enumType;
             this.selectedDecoratorType = decorator;
             this.placementMode = true;
@@ -161,69 +340,51 @@ public class GamePanel extends JPanel implements ActionListener {
         }
     }
 
-    private void cancelPlacementMode(String reason) {
-        placementMode = false;
-        highlightedCell = null;
-        setCursor(Cursor.getDefaultCursor());
-        if (reason != null && !reason.isEmpty()) {
-            game.notifyObservers(reason);
-        }
-        repaint();
-    }
-
     private void handlePlacementAttempt(int mouseX, int mouseY) {
-
         long currentTime = System.currentTimeMillis();
-
         if (currentTime - lastPlacementTime < PLACEMENT_COOLDOWN) {
             long remaining = PLACEMENT_COOLDOWN - (currentTime - lastPlacementTime);
-            cancelPlacementMode(String.format("Placement cooldown: %.1fs left.", remaining / 1000.0));
+            cancelAllModes(String.format("Placement cooldown: %.1fs left.", remaining / 1000.0));
             return;
         }
 
         Point cell = getGridCellFromMouse(mouseX, mouseY);
         if (cell == null) {
-            cancelPlacementMode("Invalid placement area!");
+            cancelAllModes("Invalid placement area!");
             return;
         }
 
         Entity existingEntity = placementGrid.get(cell);
         if (existingEntity != null && existingEntity.isActive()) {
-            cancelPlacementMode("Cell (" + cell.x + "," + cell.y + ") is already occupied!");
+            cancelAllModes("Cell (" + cell.x + "," + cell.y + ") is already occupied!");
             return;
         }
 
         int row = cell.x;
         int col = cell.y;
-
         int targetLaneY = LANE_Y_CENTERS[row];
-
         int cellCenterX = GRID_START_X + col * CELL_WIDTH + CELL_WIDTH / 2;
-
         Entity entityToPlace = null;
         int totalCost = 0;
         String displayName = "";
 
         if (selectedEnumType == null) {
-            cancelPlacementMode("Error: No entity type selected.");
+            cancelAllModes("Error: No entity type selected.");
             return;
         }
 
         if (selectedEnumType instanceof EntityTypeData.HumanType humanType) {
             Human baseHuman = game.getHumanFactory().createHuman(humanType, 0, 0);
             if (baseHuman == null) {
-                cancelPlacementMode("Failed to create human.");
+                cancelAllModes("Failed to create human.");
                 return;
             }
-
             int actualX = cellCenterX - baseHuman.getWidth() / 2;
             int actualY = targetLaneY - baseHuman.getHeight() / 2;
             baseHuman.setPosition(actualX, actualY);
-
             Human finalHuman = baseHuman;
             totalCost = humanType.getCost();
             displayName = humanType.getDisplayName();
-
             if ("Armored".equals(selectedDecoratorType)) {
                 finalHuman = new ArmoredHuman(finalHuman);
                 totalCost = finalHuman.getCost();
@@ -232,24 +393,20 @@ public class GamePanel extends JPanel implements ActionListener {
                 totalCost = finalHuman.getCost();
             }
             entityToPlace = finalHuman;
-
         } else if (selectedEnumType instanceof EntityTypeData.ObstacleType obstacleType) {
             entityToPlace = game.getObstacleFactory().createObstacle(obstacleType, 0, 0);
             if (entityToPlace == null) {
-                cancelPlacementMode("Failed to create obstacle.");
+                cancelAllModes("Failed to create obstacle.");
                 return;
             }
-
             int actualX = cellCenterX - entityToPlace.getWidth() / 2;
             int actualY = targetLaneY - entityToPlace.getHeight() / 2;
             if (entityToPlace instanceof SpikeTrap) actualY += 15;
             entityToPlace.setPosition(actualX, actualY);
-
             totalCost = obstacleType.getCost();
             displayName = obstacleType.getDisplayName();
-
         } else {
-            cancelPlacementMode("Invalid entity type selected.");
+            cancelAllModes("Invalid entity type selected.");
             return;
         }
 
@@ -262,28 +419,21 @@ public class GamePanel extends JPanel implements ActionListener {
         } else {
             game.notifyObservers("Not enough coins! Need " + totalCost + ", Have " + game.getResources());
         }
-
-        placementMode = false;
-        highlightedCell = null;
-        setCursor(Cursor.getDefaultCursor());
-        repaint();
+        cancelAllModes(null);
     }
-
 
     private Point getGridCellFromMouse(int x, int y) {
         if (x < GRID_START_X || x >= GRID_START_X + GRID_COLS * CELL_WIDTH) {
             return null;
         }
         int col = (x - GRID_START_X) / CELL_WIDTH;
-
         int closestRow = -1;
         int minDistanceY = Integer.MAX_VALUE;
-
-        for (int row = 0; row < GRID_ROWS; row++) {
-            int distanceY = Math.abs(y - LANE_Y_CENTERS[row]);
+        for (int r = 0; r < GRID_ROWS; r++) {
+            int distanceY = Math.abs(y - LANE_Y_CENTERS[r]);
             if (distanceY < minDistanceY) {
                 minDistanceY = distanceY;
-                closestRow = row;
+                closestRow = r;
             }
         }
         if (closestRow != -1 && minDistanceY <= LANE_HEIGHT_TOLERANCE) {
@@ -322,10 +472,10 @@ public class GamePanel extends JPanel implements ActionListener {
             g2d.fillRect(0, 0, getWidth(), getHeight());
         }
 
-        for (int row = 0; row < GRID_ROWS; row++) {
-            for (int col = 0; col < GRID_COLS; col++) {
-                int cellX = GRID_START_X + col * CELL_WIDTH;
-                int cellY = LANE_Y_CENTERS[row] - CELL_HEIGHT / 2;
+        for (int r = 0; r < GRID_ROWS; r++) {
+            for (int c = 0; c < GRID_COLS; c++) {
+                int cellX = GRID_START_X + c * CELL_WIDTH;
+                int cellY = LANE_Y_CENTERS[r] - CELL_HEIGHT / 2;
                 g2d.setColor(new Color(200, 200, 200, 30));
                 g2d.fillRect(cellX, cellY, CELL_WIDTH, CELL_HEIGHT);
                 g2d.setColor(new Color(255, 255, 255, 50));
@@ -344,6 +494,55 @@ public class GamePanel extends JPanel implements ActionListener {
             g2d.setStroke(new BasicStroke(2));
             g2d.drawRect(cellX, cellY, CELL_WIDTH, CELL_HEIGHT);
             g2d.setStroke(new BasicStroke(1));
+        }
+
+        if (isRelocationModeActive) {
+            if (selectedUnitForRelocation != null) {
+                g2d.setColor(new Color(50, 150, 255, 150));
+                g2d.setStroke(new BasicStroke(3));
+                g2d.drawRect(selectedUnitForRelocation.getX() -2 , selectedUnitForRelocation.getY() -2,
+                        selectedUnitForRelocation.getWidth() + 4, selectedUnitForRelocation.getHeight() + 4);
+                g2d.setStroke(new BasicStroke(1));
+            }
+            if (highlightedRelocationTargetCell != null) {
+                int row = highlightedRelocationTargetCell.x;
+                int col = highlightedRelocationTargetCell.y;
+                int cellX = GRID_START_X + col * CELL_WIDTH;
+                int cellY = LANE_Y_CENTERS[row] - CELL_HEIGHT / 2;
+                boolean cellOccupied = placementGrid.containsKey(highlightedRelocationTargetCell) &&
+                        placementGrid.get(highlightedRelocationTargetCell) != null &&
+                        placementGrid.get(highlightedRelocationTargetCell).isActive();
+
+                if (cellOccupied) {
+                    g2d.setColor(new Color(255, 100, 100, 100));
+                    g2d.fillRect(cellX, cellY, CELL_WIDTH, CELL_HEIGHT);
+                    g2d.setColor(Color.RED);
+                } else {
+                    g2d.setColor(new Color(100, 180, 255, 100));
+                    g2d.fillRect(cellX, cellY, CELL_WIDTH, CELL_HEIGHT);
+                    g2d.setColor(Color.CYAN);
+                }
+                g2d.setStroke(new BasicStroke(2));
+                g2d.drawRect(cellX, cellY, CELL_WIDTH, CELL_HEIGHT);
+                g2d.setStroke(new BasicStroke(1));
+            }
+        }
+
+        if (isBombAimingMode && BombAimLocation != null) {
+            g2d.setColor(new Color(255, 100, 0, 100));
+            int r = GameSettings.Bomb_RADIUS;
+            g2d.fillOval(BombAimLocation.x - r, BombAimLocation.y - r, 2 * r, 2 * r);
+            g2d.setColor(Color.ORANGE);
+            g2d.drawOval(BombAimLocation.x - r, BombAimLocation.y - r, 2 * r, 2 * r);
+        }
+
+        List<BombEffect> effects = game.getActiveBombEffects();
+        if (effects != null) {
+            for (BombEffect effect : effects) {
+                g2d.setColor(new Color(255, 0, 0, 150));
+                int r = effect.getRadius();
+                g2d.fillOval(effect.getX() - r, effect.getY() - r, 2 * r, 2 * r);
+            }
         }
 
         Level level = game.getCurrentLevel();
