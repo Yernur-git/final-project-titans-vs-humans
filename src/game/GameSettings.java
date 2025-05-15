@@ -4,7 +4,7 @@ public final class GameSettings {
     private GameSettings() {
     }
 
-    public static final int BASE_HEALTH_START = 1000;
+    public static final int BASE_HEALTH_START = 250;
     public static final int MAX_LEVELS = 5;
     public static final int RESOURCE_INTERVAL_TICKS = 150;
     public static final int RESOURCE_AMOUNT_BASE = 10;
