@@ -9,6 +9,7 @@ public class ObstacleFactory implements EntityFactory {
     @Override
     public Entity createEntity(String type, int x, int y, Difficulty difficulty) {
         ObstacleType obstacleType;
+
         try {
             obstacleType = ObstacleType.valueOf(type.toUpperCase());
         } catch (IllegalArgumentException e) {

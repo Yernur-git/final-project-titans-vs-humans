@@ -16,8 +16,9 @@ public class HumanFactory implements EntityFactory {
     @Override
     public Entity createEntity(String type, int x, int y, Difficulty difficulty) {
         HumanType humanType;
+
         try {
-            humanType = HumanType.valueOf(type.toUpperCase()); // например "BASIC"
+            humanType = HumanType.valueOf(type.toUpperCase());
         } catch (IllegalArgumentException e) {
             throw new RuntimeException("Unknown human type: " + type);
         }

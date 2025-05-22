@@ -9,6 +9,7 @@ public class TitanFactory implements EntityFactory {
     @Override
     public Entity createEntity(String type, int x, int y, Difficulty difficulty) {
         TitanType titanType;
+
         try {
             titanType = TitanType.valueOf(type.toUpperCase());
         } catch (IllegalArgumentException e) {
