@@ -374,17 +374,20 @@ public class GamePanel extends JPanel implements ActionListener {
         }
 
         if (selectedEnumType instanceof EntityTypeData.HumanType humanType) {
-            Human baseHuman = game.getHumanFactory().createHuman(humanType, 0, 0);
+            Entity baseHuman = game.getHumanFactory().createEntity(humanType.name(), 0, 0, game.getCurrentDifficulty());
             if (baseHuman == null) {
                 cancelAllModes("Failed to create human.");
                 return;
             }
+
             int actualX = cellCenterX - baseHuman.getWidth() / 2;
             int actualY = targetLaneY - baseHuman.getHeight() / 2;
             baseHuman.setPosition(actualX, actualY);
-            Human finalHuman = baseHuman;
+
+            Human finalHuman = (Human) baseHuman;
             totalCost = humanType.getCost();
             displayName = humanType.getDisplayName();
+
             if ("Armored".equals(selectedDecoratorType)) {
                 finalHuman = new ArmoredHuman(finalHuman);
                 totalCost = finalHuman.getCost();
@@ -392,23 +395,29 @@ public class GamePanel extends JPanel implements ActionListener {
                 finalHuman = new VeteranHuman(finalHuman);
                 totalCost = finalHuman.getCost();
             }
+
             entityToPlace = finalHuman;
+
         } else if (selectedEnumType instanceof EntityTypeData.ObstacleType obstacleType) {
-            entityToPlace = game.getObstacleFactory().createObstacle(obstacleType, 0, 0);
+            entityToPlace = game.getObstacleFactory().createEntity(obstacleType.name(), 0, 0, game.getCurrentDifficulty());
             if (entityToPlace == null) {
                 cancelAllModes("Failed to create obstacle.");
                 return;
             }
+
             int actualX = cellCenterX - entityToPlace.getWidth() / 2;
             int actualY = targetLaneY - entityToPlace.getHeight() / 2;
             if (entityToPlace instanceof SpikeTrap) actualY += 15;
+
             entityToPlace.setPosition(actualX, actualY);
             totalCost = obstacleType.getCost();
             displayName = obstacleType.getDisplayName();
+
         } else {
             cancelAllModes("Invalid entity type selected.");
             return;
         }
+
 
         if (game.getResources() >= totalCost) {
             game.addResources(-totalCost);

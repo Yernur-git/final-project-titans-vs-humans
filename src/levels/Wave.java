@@ -126,7 +126,8 @@ public class Wave {
         int startY = laneCenterY - titanHeight / 2;
         int startX = gameInstance.getGamePanelWidth() + 40 + random.nextInt(80);
 
-        Entity titan = titanFactory.createTitan(groupToSpawn.type, startX, startY, difficulty);
+        Entity titan = titanFactory.createEntity(groupToSpawn.type.name(), startX, startY, difficulty);
+
 
         if (titan != null) {
             activeEntities.add(titan);
